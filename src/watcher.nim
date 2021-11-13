@@ -110,6 +110,8 @@ when isMainModule:
       log.info fmt"❌: Non-zero exit."
     return exitCode
 
+  discard run()
+
   var cache = createCache(ls())
   var counter = 0
 
