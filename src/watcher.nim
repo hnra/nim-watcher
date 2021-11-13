@@ -1,4 +1,4 @@
-import std/[os, osproc, parseopt, times, tables, strformat]
+import std/[os, osproc, parseopt, times, tables, strformat, strutils]
 
 import globber/globber
 
@@ -7,6 +7,7 @@ type
     verbose*: bool
     cmd*: string
     glob*: string
+    injectFile*: bool
 
 # proc validateGlob(glob: string): (bool, string) =
 #   return (true, "")
@@ -15,6 +16,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
   var watchGlob = "**/*.nim"
   var watchCmd = ""
   var verbose = false
+  var injectFile = false
 
   var p = initOptParser(args)
   while true:
@@ -27,6 +29,8 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
         watchGlob = p.val
       of "v", "verbose":
         verbose = true
+      of "i", "inject":
+        injectFile = true
       else: discard
     of cmdArgument:
       if watchCmd == "":
@@ -34,7 +38,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
       else:
         watchCmd &= " " & p.key
 
-  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob)
+  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob, injectFile: injectFile)
 
 type
   Log = proc (msg: string): void
@@ -95,6 +99,13 @@ proc newFiles(cache: FileCache, files: seq[string]): CacheUpdate =
       updates.add((f, mtime))
   return CacheUpdate(removed: removed, updates: updates)
 
+proc injectFileCmd*(cmd: string, file: string): string =
+  var c = cmd
+  c = replace(c, "{}", fmt"{file}")
+  c = replace(c, r"\{", "{")
+  c = replace(c, r"\}", "}")
+  return c
+
 when isMainModule:
   let args = parseArgs(commandLineParams())
   let log = createLogger(args.verbose)
@@ -102,15 +113,18 @@ when isMainModule:
   proc ls(): seq[string] =
     return getFilesRecursive(getCurrentDir() , args.glob)
 
-  proc run(): int =
-    let exitCode = execCmd(args.cmd)
+  proc run(file: string): int =
+    var cmd = args.cmd
+    if args.injectFile:
+      cmd = injectFileCmd(cmd, file)
+    let exitCode = execCmd(cmd)
     if exitCode == 0:
       log.info fmt"✅: Success"
     else:
       log.info fmt"❌: Non-zero exit."
     return exitCode
 
-  discard run()
+  discard run("")
 
   var cache = createCache(ls())
   var counter = 0
@@ -126,7 +140,7 @@ when isMainModule:
       for (f, t) in fastUpdate.updates:
         cache[f] = t
         log.info fmt"🧨: '{f}'"
-      discard run()
+        discard run(f)
     for f in fastUpdate.removed:
       del(cache, f)
       log.info fmt"🗑️ : '{f}'"
