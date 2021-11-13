@@ -147,6 +147,8 @@ when isMainModule:
       for (f, t) in update.updates:
         log.info fmt"🐣: '{f}')"
         cache[f] = t
+      if len(update.updates) > 0:
+        discard run(update.updates[0][0])
     var fastUpdate = hasChanged(cache)
     if len(fastUpdate.updates) > 0:
       for (f, t) in fastUpdate.updates:
