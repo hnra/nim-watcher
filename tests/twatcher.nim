@@ -26,6 +26,29 @@ test "injectArg":
   check injectFileCmd(pargs.cmd, "") == "cmd "
   check injectFileCmd(pargs.cmd, "foo.nim") == "cmd foo.nim"
 
+test "leadingEdge is default on":
+  let pargs = parseArgs(split("cmd"))
+  check pargs.cmd == "cmd"
+  check pargs.leadingEdge
+
+test "leadingEdge is default off if file is injected":
+  let pargs = parseArgs(split("-i cmd"))
+  check pargs.cmd == "cmd"
+  check not pargs.leadingEdge
+
+test "leadingEdge default can be overridden":
+  var pargs = parseArgs(split("--no-leading-edge cmd"))
+  check pargs.cmd == "cmd"
+  check not pargs.leadingEdge
+
+  pargs = parseArgs(split("--no-l cmd"))
+  check not pargs.leadingEdge
+
+test "leadingEdge can be enabled if file is injected":
+  let pargs = parseArgs(split("-l -i cmd"))
+  check pargs.cmd == "cmd"
+  check pargs.leadingEdge
+
 test "file is injected":
   check injectFileCmd("echo {}", "hello.nim") == "echo hello.nim"
 

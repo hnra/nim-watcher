@@ -8,6 +8,7 @@ type
     cmd*: string
     glob*: string
     injectFile*: bool
+    leadingEdge*: bool
 
 # proc validateGlob(glob: string): (bool, string) =
 #   return (true, "")
@@ -17,6 +18,8 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
   var watchCmd = ""
   var verbose = false
   var injectFile = false
+  var leadingEdge = true
+  var leadingEdgeForce = false
 
   var p = initOptParser(args)
   while true:
@@ -31,6 +34,14 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
         verbose = true
       of "i", "inject":
         injectFile = true
+        if not leadingEdgeForce:
+          leadingEdge = false
+      of "l", "leading-edge":
+        leadingEdge = true
+        leadingEdgeForce = true
+      of "no-l", "no-leading-edge":
+        leadingEdge = false
+        leadingEdgeForce = true
       else: discard
     of cmdArgument:
       if watchCmd == "":
@@ -38,7 +49,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
       else:
         watchCmd &= " " & p.key
 
-  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob, injectFile: injectFile)
+  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob, injectFile: injectFile, leadingEdge: leadingEdge)
 
 type
   Log = proc (msg: string): void
@@ -124,7 +135,8 @@ when isMainModule:
       log.info fmt"❌: Non-zero exit."
     return exitCode
 
-  discard run("")
+  if args.leadingEdge:
+    discard run("")
 
   var cache = createCache(ls())
   var counter = 0
