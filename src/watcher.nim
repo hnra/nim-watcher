@@ -4,9 +4,12 @@ import globber/globber
 
 type
   ProgramArgs* = object
-    log*: proc (msg: string): void
+    verbose*: bool
     cmd*: string
     glob*: string
+
+# proc validateGlob(glob: string): (bool, string) =
+#   return (true, "")
 
 proc parseArgs*(args: seq[string]): ProgramArgs =
   var watchGlob = "**/*.nim"
@@ -31,79 +34,101 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
       else:
         watchCmd &= " " & p.key
 
-  proc log(msg: string): void =
-    if verbose:
-      echo(msg)
+  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob)
 
-  assert watchCmd != ""
+type
+  Log = proc (msg: string): void
+  Level = enum info, warning, error
+  Logger = object
+    info*: Log
+    warning*: Log
+    error*: Log
 
-  return ProgramArgs(log: log, cmd: watchCmd, glob: watchGlob)
+proc createLogger(verbose: bool): Logger =
+  proc log(level: Level): proc (msg:string): void =
+    proc log(msg: string): void =
+      case level:
+      of info:
+        if verbose:
+          echo(msg)
+      of warning, error:
+        echo(msg)
+    return log
+
+  return Logger(info: log(info), warning: log(warning), error: log(error))
+
+type
+  FileCache = TableRef[string, Time]
+  CacheUpdate = object
+    removed: seq[string]
+    updates: seq[(string, Time)]
+
+proc createCache(paths: seq[string]): FileCache =
+  var cache = newTable[string, Time]()
+
+  for f in paths:
+    let mtime = getLastModificationTime f
+    cache[f] = mtime
+
+  return cache
+
+proc hasChanged(cache: FileCache): CacheUpdate =
+  var removed = newSeq[string]()
+  var updates = newSeq[(string, Time)]()
+
+  for f, t in cache.pairs:
+    if fileExists(f):
+      let mtime = getlastmodificationtime f
+      if mtime > t:
+        updates.add((f, mtime))
+        break
+    else:
+      removed.add(f)
+  return CacheUpdate(removed: removed, updates: updates)
+
+proc newFiles(cache: FileCache, files: seq[string]): CacheUpdate =
+  const removed = newSeq[string]()
+  var updates = newSeq[(string, Time)]()
+  for f in files:
+    if not (f in cache):
+      let mtime = getlastmodificationtime f
+      updates.add((f, mtime))
+  return CacheUpdate(removed: removed, updates: updates)
 
 when isMainModule:
   let args = parseArgs(commandLineParams())
+  let log = createLogger(args.verbose)
 
   proc ls(): seq[string] =
     return getFilesRecursive(getCurrentDir() , args.glob)
 
-  proc run(): void =
-    args.log fmt"👟: Running"
+  proc run(): int =
     let exitCode = execCmd(args.cmd)
     if exitCode == 0:
-      args.log fmt"✅: Success"
+      log.info fmt"✅: Success"
     else:
-      args.log fmt"❌: Non-zero exit."
+      log.info fmt"❌: Non-zero exit."
+    return exitCode
 
-  proc createCache(): TableRef[string, Time] =
-    var cache = newTable[string, Time]()
-
-    for f in ls():
-      let mtime = getLastModificationTime f
-      cache[f] = mtime
-      args.log fmt"🐝: '{f}'"
-
-    return cache
-
-  var cache = createCache()
-
-  proc hasChangedFast(): bool =
-    var removedFiles = newSeq[string]()
-    for f, t in cache.pairs:
-      if fileExists(f):
-        let mtime = getlastmodificationtime f
-        if mtime > t:
-          args.log fmt"🧨: '{f}'"
-          cache[f] = mtime
-          return true
-      else:
-        removedFiles.add(f)
-    for f in removedFiles:
-      args.log fmt"🗑️ : '{f}'"
-      del(cache, f)
-
-  proc hasChanged(): bool =
-    var changed = false
-    for f in ls():
-      let mtime = getlastmodificationtime f
-      if f in cache:
-        if mtime > cache[f]:
-          args.log fmt"🧨: '{f}'"
-          cache[f] = mtime
-          changed = true
-      else:
-        args.log fmt"🐣: '{f}')"
-        cache[f] = mtime
-        changed = true
-    return changed
-
+  var cache = createCache(ls())
   var counter = 0
 
   while true:
     if counter mod 10 == 0:
-      if hasChanged():
-        run()
-    else:
-      if hasChangedFast():
-        run()
+      var update = newFiles(cache, ls())
+      for (f, t) in update.updates:
+        log.info fmt"🐣: '{f}')"
+        cache[f] = t
+    var fastUpdate = hasChanged(cache)
+    if len(fastUpdate.updates) > 0:
+      for (f, t) in fastUpdate.updates:
+        cache[f] = t
+        log.info fmt"🧨: '{f}'"
+      discard run()
+    for f in fastUpdate.removed:
+      del(cache, f)
+      log.info fmt"🗑️ : '{f}'"
+
     inc(counter)
     sleep 100
 
