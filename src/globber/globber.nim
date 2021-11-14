@@ -15,15 +15,6 @@ proc pathParts*(path: string): seq[string] =
       parts.add(t)
     return parts
 
-proc takeWhile*[T](f: proc(t: T): bool, xs: seq[T]): seq[T] =
-  var ys: seq[T] = @[]
-  for x in xs:
-    if f(x):
-      ys.add(x)
-    else:
-      break
-  return ys
-
 proc splitAt*[T](f: proc(t: T): bool, xs: seq[T]): (seq[T], seq[T]) =
   var head = newSeq[T]()
   var tail = newSeq[T]()
@@ -36,15 +27,6 @@ proc splitAt*[T](f: proc(t: T): bool, xs: seq[T]): (seq[T], seq[T]) =
     else:
       head.add(x)
   return (head, tail)
-
-proc baseDir*(glob: string): (string, seq[string]) =
-  let parts = pathParts(glob)
-  var (base, glob) = splitAt(( proc (p: string): bool = p == "**" ), parts)
-  
-  if len(glob) == 0:
-    glob = base[^1 .. ^1]
-    base = base[0 .. ^2]
-  return (joinPath(base), glob)
 
 proc getFilesRecursive(basePath: string, pattern: Regex): seq[string] =
   var matches = newSeq[string]()
@@ -60,40 +42,47 @@ proc getFilesRecursive(basePath: string, pattern: Regex): seq[string] =
 
   return matches
 
-proc globToPattern*(glob: string, base = ""): string =
-  var b = base
-  if len(b) > 0 and b[^1] != DirSep:
-    b = fmt"{b}{DirSep}"
-  var baseRe = escapeRe(b)
+proc addTrailingDirSep(path: string): string =
+  if len(path) > 0 and path[^1] != DirSep:
+    return path & DirSep
+  return path
+
+proc globToPattern(glob: string, base: string): string =
+  var baseRe = escapeRe(addTrailingDirSep(base))
   if len(baseRe) > 0:
     baseRe = "^" & baseRe
 
   const star = escapeRe("*")
   const dblStar = star & star
-  const fslash = escapeRe("/")
+  let sep = escapeRe($DirSep)
 
   var pattern = escapeRe(glob)
 
-  pattern = replace(pattern, dblStar & fslash, ".*")
-  pattern = replace(pattern, star, fmt"[^{fslash}]*")
+  pattern = replace(pattern, dblStar & sep, ".*")
+  pattern = replace(pattern, star, fmt"[^{sep}]*")
   pattern = replace(pattern, ".*.*", ".*")
 
-  return fmt"{baseRe}{pattern}$"
+  return baseRe & pattern & "$"
 
-proc getFilesRecursive*(basePath: string, glob: string): seq[string] =
+proc getDeepestBase(basePath: string, glob: string): (string, string) =
   let parts = pathParts(joinPath(basePath, glob))
   
-  var absBase = ""
-  var relGlob = ""
+  var deepBase = ""
+  var restGlob = ""
   var hasSplit = false
   for i, p in parts:
     if p == "**" or i == len(parts) - 1:
       hasSplit = true
     if hasSplit:
-      relGlob = relGlob / p
+      restGlob = restGlob / p
     else:
-      absBase = absBase / p
+      deepBase = deepBase / p
 
-  let pattern = re(globToPattern(relGlob, absBase))
-  return getFilesRecursive(absBase, pattern)
+  return (deepBase, restGlob)
+
+proc getFilesRecursive*(basePath: string, glob: string): seq[string] =
+  let (base, glob) = getDeepestBase(basePath, glob)
+
+  let pattern = re(globToPattern(glob, base))
+  return getFilesRecursive(base, pattern)
 

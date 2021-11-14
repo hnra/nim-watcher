@@ -10,12 +10,9 @@ type
     injectFile*: bool
     leadingEdge*: bool
 
-# proc validateGlob(glob: string): (bool, string) =
-#   return (true, "")
-
 proc parseArgs*(args: seq[string]): ProgramArgs =
-  var watchGlob = "**/*.nim"
-  var watchCmd = ""
+  var glob = "**/*.nim"
+  var cmd = ""
   var verbose = false
   var injectFile = false
   var leadingEdge = true
@@ -29,7 +26,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
     of cmdShortOption, cmdLongOption:
       case p.key:
       of "g", "glob":
-        watchGlob = p.val
+        glob = p.val
       of "v", "verbose":
         verbose = true
       of "i", "inject":
@@ -44,12 +41,12 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
         leadingEdgeForce = true
       else: discard
     of cmdArgument:
-      if watchCmd == "":
-        watchCmd = p.key
+      if cmd == "":
+        cmd = p.key
       else:
-        watchCmd &= " " & p.key
+        cmd &= " " & p.key
 
-  return ProgramArgs(verbose: verbose, cmd: watchCmd, glob: watchGlob, injectFile: injectFile, leadingEdge: leadingEdge)
+  return ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge)
 
 type
   Log = proc (msg: string): void
