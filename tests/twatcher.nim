@@ -37,17 +37,22 @@ test "leadingEdge is default off if file is injected":
   check not pargs.leadingEdge
 
 test "leadingEdge default can be overridden":
-  var pargs = parseArgs(split("--no-leading-edge cmd"))
+  var pargs = parseArgs(split("-l:false cmd"))
   check pargs.cmd == "cmd"
   check not pargs.leadingEdge
 
-  pargs = parseArgs(split("--no-l cmd"))
+  pargs = parseArgs(split("-l:false cmd"))
   check not pargs.leadingEdge
 
 test "leadingEdge can be enabled if file is injected":
   let pargs = parseArgs(split("-l -i cmd"))
   check pargs.cmd == "cmd"
   check pargs.leadingEdge
+
+test "silent success can be enabled":
+  let pargs = parseArgs(split("-s cmd"))
+  check pargs.cmd == "cmd"
+  check pargs.silentSuccess
 
 test "file is injected":
   check injectFileCmd("echo {}", "hello.nim") == "echo hello.nim"

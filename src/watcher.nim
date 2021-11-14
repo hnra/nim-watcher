@@ -9,6 +9,7 @@ type
     glob*: string
     injectFile*: bool
     leadingEdge*: bool
+    silentSuccess*: bool
 
 proc parseArgs*(args: seq[string]): ProgramArgs =
   var glob = "**/*.nim"
@@ -17,6 +18,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
   var injectFile = false
   var leadingEdge = true
   var leadingEdgeForce = false
+  var silentSuccess = false
 
   var p = initOptParser(args)
   while true:
@@ -34,11 +36,13 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
         if not leadingEdgeForce:
           leadingEdge = false
       of "l", "leading-edge":
-        leadingEdge = true
-        leadingEdgeForce = true
-      of "no-l", "no-leading-edge":
-        leadingEdge = false
-        leadingEdgeForce = true
+        if p.val == "false":
+          leadingEdge = false
+        else:
+          leadingEdge = true
+          leadingEdgeForce = true
+      of "s", "silent-success":
+        silentSuccess = true
       else: discard
     of cmdArgument:
       if cmd == "":
@@ -46,15 +50,16 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
       else:
         cmd &= " " & p.key
 
-  return ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge)
+  return ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge, silentSuccess: silentSuccess)
 
 type
   Log = proc (msg: string): void
-  Level = enum info, warning, error
+  Level = enum info, warning, error, console
   Logger = object
     info*: Log
     warning*: Log
     error*: Log
+    console*: Log
 
 proc createLogger(verbose: bool): Logger =
   proc log(level: Level): proc (msg:string): void =
@@ -63,11 +68,11 @@ proc createLogger(verbose: bool): Logger =
       of info:
         if verbose:
           echo(msg)
-      of warning, error:
+      of console, warning, error:
         echo(msg)
     return log
 
-  return Logger(info: log(info), warning: log(warning), error: log(error))
+  return Logger(info: log(info), warning: log(warning), error: log(error), console: log(console))
 
 type
   FileCache = TableRef[string, Time]
@@ -125,11 +130,20 @@ when isMainModule:
     var cmd = args.cmd
     if args.injectFile:
       cmd = injectFileCmd(cmd, file)
-    let exitCode = execCmd(cmd)
-    if exitCode == 0:
-      log.info fmt"✅: Success"
+    var exitCode = 0
+    var cmdLog = log.info
+    if args.silentSuccess:
+      var (output, ec) = execCmdEx(cmd)
+      exitCode = ec
+      cmdLog = log.console
+      if exitCode != 0:
+        cmdLog output
     else:
-      log.info fmt"❌: Non-zero exit."
+      exitCode = execCmd(cmd)
+    if exitCode == 0:
+      cmdLog fmt"✅: Success"
+    else:
+      cmdLog fmt"❌: Non-zero exit."
     return exitCode
 
   if args.leadingEdge:
