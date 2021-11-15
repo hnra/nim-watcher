@@ -1,4 +1,4 @@
-import std/[os, osproc, parseopt, times, tables, strformat, strutils]
+import std/[os, osproc, parseopt, times, tables, strformat, strutils, options]
 
 import globber/globber
 
@@ -11,7 +11,51 @@ type
     leadingEdge*: bool
     silentSuccess*: bool
 
-proc parseArgs*(args: seq[string]): ProgramArgs =
+const helpText = """
+usage: watcher [--help[=argument]] [--verbose] [--glob=<glob>] [--inject]
+               [--leading-edge[=false]] [--silent-succes]
+               <command>
+
+Most arguments can also be supplied as:
+  -a, --a, -argument, or --argument.
+If the argument takes a value it can be supplied with either "=" or ":".
+"""
+
+proc help(cmd: string) =
+  case cmd:
+  of "g", "glob":
+    echo fmt"""
+watcher --glob=<glob> <command>
+  Runs <command> whenever a file which matches <glob> is changed.
+  <glob> is a path with wildcards: .., *, or **.
+
+Example:
+  watcher --glob="**{DirSep}*.py" <command>
+  <command> runs whenever a .py file in the current directory tree changes.
+"""
+  of "i", "inject-file":
+    echo """
+watcher --inject-file <command>
+  Injects the full path of the file whose modification was detected.
+  The path is injected at "{}" in the command (use \ to escape { or }).
+  --inject-file implies --leading-edge=false.
+
+Example:
+  watcher --inject-file echo {}
+  Will run "echo <path-to-file>" whenever <path-to-file> changes.
+"""
+  of "l", "leading-edge":
+    echo """
+watcher --leading-edge <command>
+  Causes <command> to run on startup. This is the default behavior unless
+  --inject-file is given.
+watcher --leading-edge=false <command>
+  Disables <command> being run on startup. Default if --inject-file is given.
+"""
+  else:
+    echo helpText
+
+proc parseArgs*(args: seq[string]): Option[ProgramArgs] =
   ## Parses the command line arguments into a `ProgramArgs` object.
 
   var glob = fmt"**{DirSep}*.nim"
@@ -29,6 +73,9 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
     of cmdEnd: break
     of cmdShortOption, cmdLongOption:
       case p.key:
+      of "h", "help":
+        help(p.val)
+        return none(ProgramArgs)
       of "g", "glob":
         glob = p.val
       of "v", "verbose":
@@ -52,7 +99,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
       else:
         cmd &= " " & p.key
 
-  return ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge, silentSuccess: silentSuccess)
+  return some(ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge, silentSuccess: silentSuccess))
 
 type
   Log = proc (msg: string)
@@ -120,8 +167,14 @@ proc injectFileCmd*(cmd: string, file: string): string =
   c = c.replace(r"\}", "}")
   return c
 
-when isMainModule:
-  let args = parseArgs(commandLineParams())
+proc main(): int =
+  var args: ProgramArgs
+  let oArgs = parseArgs(commandLineParams())
+  if oArgs.isSome:
+    args = oArgs.get()
+  else:
+    return 1
+
   let log = createLogger(args.verbose)
 
   proc ls(): seq[string] =
@@ -173,4 +226,10 @@ when isMainModule:
 
     inc(counter)
     sleep 100
+
+  return 0
+
+
+when isMainModule:
+  discard main()
 
