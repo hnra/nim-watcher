@@ -16,8 +16,8 @@ when defined(windows):
     check pathParts(r"C:\bin\bash") == @["C:", "bin", "bash"]
 
 test "splitAt":
-  check splitAt(( proc (x: int): bool = x > 5 ), toSeq 1..10) == (toSeq 1..5, toSeq 6..10)
-  check splitAt(( proc (p: string): bool = p == "**" ), @["/", "bin", "**", "foo"]) == (@["/", "bin"], @["**", "foo"])
+  check splitAt(proc (x: int): bool = x > 5, toSeq 1..10) == (toSeq 1..5, toSeq 6..10)
+  check splitAt(proc (p: string): bool = p == "**", @["/", "bin", "**", "foo"]) == (@["/", "bin"], @["**", "foo"])
 
 const sep = $DirSep
 let repo = getCurrentDir()
@@ -30,50 +30,50 @@ proc allExtensions(files: seq[string], ext: string): bool =
 
 test "globber.nim finds file":
   let files = getFilesRecursive(repo / "src" / "globber", "globber.nim")
-  check hasFile(files, "globber.nim")
-  check not hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("globber.nim")
+  check not files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "*.nim glob finds no src/test files":
   let files = getFilesRecursive(repo, "*.nim")
-  check not hasFile(files, "globber.nim")
-  check not hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check not files.hasFile("globber.nim")
+  check not files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "src/* glob finds src files":
   let files = getFilesRecursive(repo, "src" / "*.nim")
-  check hasFile(files, "watcher.nim")
-  check not hasFile(files, "globber.nim")
-  check not hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("watcher.nim")
+  check not files.hasFile("globber.nim")
+  check not files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "**/ glob finds all files":
   let files = getFilesRecursive(repo, "**" / "*.nim")
-  check hasFile(files, "globber.nim")
-  check hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("globber.nim")
+  check files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "**/** star glob finds all files":
   let files = getFilesRecursive(repo, "**" / "**" / "*.nim")
-  check hasFile(files, "globber.nim")
-  check hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("globber.nim")
+  check files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "src/** glob fins src files":
   let files = getFilesRecursive(repo, "src" / "**" / "*.nim")
-  check hasFile(files, "globber.nim")
-  check not hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("globber.nim")
+  check not files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "../** glob finds all files":
   let files = getFilesRecursive(repo / "src", ".." / "**" / "*.nim")
-  check hasFile(files, "globber.nim")
-  check hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check files.hasFile("globber.nim")
+  check files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 
 test "../tests glob finds test files":
   let files = getFilesRecursive(repo / "src", ".." / "tests" / "*.nim")
-  check not hasFile(files, "globber.nim")
-  check hasFile(files, "tglobber.nim")
-  check allExtensions(files, ".nim")
+  check not files.hasFile("globber.nim")
+  check files.hasFile("tglobber.nim")
+  check files.allExtensions(".nim")
 

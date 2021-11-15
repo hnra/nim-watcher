@@ -53,7 +53,7 @@ proc parseArgs*(args: seq[string]): ProgramArgs =
   return ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge, silentSuccess: silentSuccess)
 
 type
-  Log = proc (msg: string): void
+  Log = proc (msg: string)
   Level = enum info, warning, error, console
   Logger = object
     info*: Log
@@ -94,8 +94,8 @@ proc hasChanged(cache: FileCache): CacheUpdate =
   var updates = newSeq[(string, Time)]()
 
   for f, t in cache.pairs:
-    if fileExists(f):
-      let mtime = getlastmodificationtime f
+    if f.fileExists:
+      let mtime = f.getlastmodificationtime
       if mtime > t:
         updates.add((f, mtime))
         break
@@ -108,15 +108,14 @@ proc newFiles(cache: FileCache, files: seq[string]): CacheUpdate =
   var updates = newSeq[(string, Time)]()
   for f in files:
     if not (f in cache):
-      let mtime = getlastmodificationtime f
+      let mtime = f.getlastmodificationtime
       updates.add((f, mtime))
   return CacheUpdate(removed: removed, updates: updates)
 
 proc injectFileCmd*(cmd: string, file: string): string =
-  var c = cmd
-  c = replace(c, "{}", fmt"{file}")
-  c = replace(c, r"\{", "{")
-  c = replace(c, r"\}", "}")
+  var c = cmd.replace("{}", fmt"{file}")
+  c = c.replace(r"\{", "{")
+  c = c.replace(r"\}", "}")
   return c
 
 when isMainModule:
@@ -124,12 +123,12 @@ when isMainModule:
   let log = createLogger(args.verbose)
 
   proc ls(): seq[string] =
-    return getFilesRecursive(getCurrentDir() , args.glob)
+    return getCurrentDir().getFilesRecursive(args.glob)
 
   proc run(file: string): int =
     var cmd = args.cmd
     if args.injectFile:
-      cmd = injectFileCmd(cmd, file)
+      cmd = cmd.injectFileCmd(file)
     var exitCode = 0
     var cmdLog = log.info
     if args.silentSuccess:
@@ -141,26 +140,26 @@ when isMainModule:
     else:
       exitCode = execCmd(cmd)
     if exitCode == 0:
-      cmdLog fmt"✅: Success"
+      cmdLog(fmt"✅: Success")
     else:
-      cmdLog fmt"❌: Non-zero exit."
+      cmdLog(fmt"❌: Non-zero exit.")
     return exitCode
 
   if args.leadingEdge:
     discard run("")
 
-  var cache = createCache(ls())
+  var cache = ls().createCache
   var counter = 0
 
   while true:
     if counter mod 10 == 0:
-      var update = newFiles(cache, ls())
+      var update = cache.newFiles(ls())
       for (f, t) in update.updates:
         log.info fmt"🐣: '{f}')"
         cache[f] = t
       if len(update.updates) > 0:
         discard run(update.updates[0][0])
-    var fastUpdate = hasChanged(cache)
+    var fastUpdate = cache.hasChanged
     if len(fastUpdate.updates) > 0:
       for (f, t) in fastUpdate.updates:
         cache[f] = t

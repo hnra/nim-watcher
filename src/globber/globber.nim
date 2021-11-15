@@ -1,7 +1,7 @@
 import std/[os,re, strformat, strutils]
 
 proc pathParts*(path: string): seq[string] =
-  let (h, t) = splitPath(path)
+  let (h, t) = path.splitPath
 
   if h == path:
     if h == "":
@@ -9,7 +9,7 @@ proc pathParts*(path: string): seq[string] =
     else:
       return @[h]
   else:
-    var parts = pathParts(h)
+    var parts = h.pathParts
 
     if t != "":
       parts.add(t)
@@ -31,32 +31,32 @@ proc splitAt*[T](f: proc(t: T): bool, xs: seq[T]): (seq[T], seq[T]) =
 proc getFilesRecursive(basePath: string, pattern: Regex): seq[string] =
   var matches = newSeq[string]()
 
-  for kind, path in walkDir(basePath):
+  for kind, path in basePath.walkDir:
     case kind:
     of pcFile:
-      if contains(path, pattern):
+      if path.contains(pattern):
         matches.add(path)
     of pcDir:
-      matches.add(getFilesRecursive(path, pattern))
+      matches.add(path.getFilesRecursive(pattern))
     else: discard
 
   return matches
 
 proc addTrailingDirSep(path: string): string =
-  if len(path) > 0 and path[^1] != DirSep:
+  if path.len > 0 and path[^1] != DirSep:
     return path & DirSep
   return path
 
 proc globToPattern(glob: string, base: string): string =
-  var baseRe = escapeRe(addTrailingDirSep(base))
-  if len(baseRe) > 0:
+  var baseRe = base.addTrailingDirSep.escapeRe
+  if baseRe.len > 0:
     baseRe = "^" & baseRe
 
-  const star = escapeRe("*")
+  const star = "*".escapeRe
   const dblStar = star & star
-  let sep = escapeRe($DirSep)
+  let sep = ($DirSep).escapeRe
 
-  var pattern = escapeRe(glob)
+  var pattern = glob.escapeRe
 
   pattern = replace(pattern, dblStar & sep, ".*")
   pattern = replace(pattern, star, fmt"[^{sep}]*")
@@ -65,13 +65,13 @@ proc globToPattern(glob: string, base: string): string =
   return baseRe & pattern & "$"
 
 proc getDeepestBase(basePath: string, glob: string): (string, string) =
-  let parts = pathParts(joinPath(basePath, glob))
+  let parts = basePath.joinPath(glob).pathParts
   
   var deepBase = ""
   var restGlob = ""
   var hasSplit = false
   for i, p in parts:
-    if p == "**" or i == len(parts) - 1:
+    if p == "**" or i == parts.len - 1:
       hasSplit = true
     if hasSplit:
       restGlob = restGlob / p
@@ -81,8 +81,8 @@ proc getDeepestBase(basePath: string, glob: string): (string, string) =
   return (deepBase, restGlob)
 
 proc getFilesRecursive*(basePath: string, glob: string): seq[string] =
-  let (base, glob) = getDeepestBase(basePath, glob)
+  let (base, glob) = basePath.getDeepestBase(glob)
 
-  let pattern = re(globToPattern(glob, base))
-  return getFilesRecursive(base, pattern)
+  let pattern = glob.globToPattern(base).re
+  return base.getFilesRecursive(pattern)
 
