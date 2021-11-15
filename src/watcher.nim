@@ -12,7 +12,9 @@ type
     silentSuccess*: bool
 
 proc parseArgs*(args: seq[string]): ProgramArgs =
-  var glob = "**/*.nim"
+  ## Parses the command line arguments into a `ProgramArgs` object.
+
+  var glob = fmt"**{DirSep}*.nim"
   var cmd = ""
   var verbose = false
   var injectFile = false

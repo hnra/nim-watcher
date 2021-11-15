@@ -19,6 +19,36 @@ test "splitAt":
   check splitAt(proc (x: int): bool = x > 5, toSeq 1..10) == (toSeq 1..5, toSeq 6..10)
   check splitAt(proc (p: string): bool = p == "**", @["/", "bin", "**", "foo"]) == (@["/", "bin"], @["**", "foo"])
 
+test "UNIX glob matches":
+  const glob = "**/*.nim"
+  const path1 = "a/b/c/foo.nim"
+  const path2 = "a/b/c/foo.py"
+  let pattern = re(globToPattern(glob, dirSep="/"))
+  assert match(path1, pattern)
+  assert not match(path2, pattern)
+
+test "Windows glob matches":
+  const glob = r"**\*.nim"
+  const path1 = r"a\foo.nim"
+  const path2 = r"a\foo.py"
+  let pattern1 = re(globToPattern(glob, dirSep=r"\"))
+  assert match(path1, pattern1)
+  assert not match(path2, pattern1)
+
+  const path3 = r"C:\a\foo.nim"
+  const path4 = r"C:\a\foo.py"
+  let pattern2 = re(globToPattern(glob, base=r"C:\", dirSep=r"\"))
+  assert match(path3, pattern2)
+  assert not match(path1, pattern2)
+  assert not match(path2, pattern2)
+  assert not match(path4, pattern2)
+
+test "glob to pattern":
+  const glob = "**/*.nim"
+  const path1 = "a/b/c/foo.nim"
+  const pattern = globToPattern(glob, dirSep="/")
+  assert match(path1, re(pattern))
+
 const sep = $DirSep
 let repo = getCurrentDir()
 
