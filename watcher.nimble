@@ -2,7 +2,7 @@
 
 version       = "0.1.0"
 author        = "Henrik Andersson"
-description   = "A new awesome nimble package"
+description   = "A simple file watcher."
 license       = "MIT"
 srcDir        = "src"
 bin           = @["watcher"]
