@@ -1,4 +1,4 @@
-import std/[os, osproc, parseopt, times, tables, strformat, strutils, options]
+import std/[os, osproc, parseopt, times, tables, strformat, strutils]
 
 import globber/globber
 
@@ -21,10 +21,10 @@ Most arguments can also be supplied as:
 If the argument takes a value it can be supplied with either "=" or ":".
 """
 
-proc help(cmd: string) =
+proc help(cmd = ""): string =
   case cmd:
   of "g", "glob":
-    echo fmt"""
+    return fmt"""
 watcher --glob=<glob> <command>
   Runs <command> whenever a file which matches <glob> is changed.
   <glob> is a path with wildcards: .., *, or **.
@@ -33,29 +33,33 @@ Example:
   watcher --glob="**{DirSep}*.py" <command>
   <command> runs whenever a .py file in the current directory tree changes.
 """
-  of "i", "inject-file":
-    echo """
-watcher --inject-file <command>
+  of "i", "inject":
+    return """
+watcher --inject <command>
   Injects the full path of the file whose modification was detected.
   The path is injected at "{}" in the command (use \ to escape { or }).
-  --inject-file implies --leading-edge=false.
+  --inject implies --leading-edge=false.
 
 Example:
-  watcher --inject-file echo {}
+  watcher --inject echo {}
   Will run "echo <path-to-file>" whenever <path-to-file> changes.
 """
   of "l", "leading-edge":
-    echo """
+    return """
 watcher --leading-edge <command>
   Causes <command> to run on startup. This is the default behavior unless
-  --inject-file is given.
+  --inject is given.
 watcher --leading-edge=false <command>
-  Disables <command> being run on startup. Default if --inject-file is given.
+  Disables <command> being run on startup. Default if --inject is given.
 """
   else:
-    echo helpText
+    return helpText
 
-proc parseArgs*(args: seq[string]): Option[ProgramArgs] =
+type
+  HelpError* = object of CatchableError
+  InvalidArgument* = object of CatchableError
+
+proc parseArgs*(args: seq[string]): ProgramArgs =
   ## Parses the command line arguments into a `ProgramArgs` object.
 
   var glob = fmt"**{DirSep}*.nim"
@@ -74,8 +78,7 @@ proc parseArgs*(args: seq[string]): Option[ProgramArgs] =
     of cmdShortOption, cmdLongOption:
       case p.key:
       of "h", "help":
-        help(p.val)
-        return none(ProgramArgs)
+        raise newException(HelpError, help(p.val))
       of "g", "glob":
         glob = p.val
       of "v", "verbose":
@@ -99,29 +102,44 @@ proc parseArgs*(args: seq[string]): Option[ProgramArgs] =
       else:
         cmd &= " " & p.key
 
-  return some(ProgramArgs(verbose: verbose, cmd: cmd, glob: glob, injectFile: injectFile, leadingEdge: leadingEdge, silentSuccess: silentSuccess))
+  if injectFile and not cmd.contains("{}"):
+    raise newException(InvalidArgument, "--inject requires {} to be present in the command")
+
+  if cmd.strip() == "":
+    raise newException(HelpError, help())
+
+  return ProgramArgs(
+    verbose: verbose,
+    cmd: cmd,
+    glob: glob,
+    injectFile: injectFile,
+    leadingEdge: leadingEdge,
+    silentSuccess: silentSuccess)
 
 type
   Log = proc (msg: string)
   Level = enum info, warning, error, console
   Logger = object
-    info*: Log
-    warning*: Log
-    error*: Log
-    console*: Log
+    info: Log
+    warning: Log
+    error: Log
+    console: Log
 
 proc createLogger(verbose: bool): Logger =
   proc log(level: Level): proc (msg:string): void =
-    proc log(msg: string): void =
+    return proc (msg: string): void =
       case level:
       of info:
         if verbose:
           echo(msg)
       of console, warning, error:
         echo(msg)
-    return log
 
-  return Logger(info: log(info), warning: log(warning), error: log(error), console: log(console))
+  return Logger(
+    info: log(info),
+    warning: log(warning),
+    error: log(error),
+    console: log(console))
 
 type
   FileCache = TableRef[string, Time]
@@ -130,13 +148,11 @@ type
     updates: seq[(string, Time)]
 
 proc createCache(paths: seq[string]): FileCache =
-  var cache = newTable[string, Time]()
+  result = newTable[string, Time]()
 
   for f in paths:
     let mtime = getLastModificationTime f
-    cache[f] = mtime
-
-  return cache
+    result[f] = mtime
 
 proc hasChanged(cache: FileCache): CacheUpdate =
   var removed = newSeq[string]()
@@ -162,23 +178,25 @@ proc newFiles(cache: FileCache, files: seq[string]): CacheUpdate =
   return CacheUpdate(removed: removed, updates: updates)
 
 proc injectFileCmd*(cmd: string, file: string): string =
-  var c = cmd.replace("{}", fmt"{file}")
-  c = c.replace(r"\{", "{")
-  c = c.replace(r"\}", "}")
-  return c
+  result = cmd.replace("{}", fmt"{file}")
+  result = result.replace(r"\{", "{")
+  result = result.replace(r"\}", "}")
 
 proc main(): int =
   var args: ProgramArgs
-  let oArgs = parseArgs(commandLineParams())
-  if oArgs.isSome:
-    args = oArgs.get()
-  else:
+  try:
+    args = parseArgs(commandLineParams())
+  except InvalidArgument:
+    echo getCurrentExceptionMsg()
     return 1
+  except HelpError:
+    echo getCurrentExceptionMsg()
+    return 0
 
   let log = createLogger(args.verbose)
 
   proc ls(): seq[string] =
-    return getCurrentDir().getFilesRecursive(args.glob)
+    getCurrentDir().getFilesRecursive(args.glob)
 
   proc run(file: string): int =
     var cmd = args.cmd
@@ -229,7 +247,6 @@ proc main(): int =
 
   return 0
 
-
 when isMainModule:
-  discard main()
+  quit main()
 

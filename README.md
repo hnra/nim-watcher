@@ -16,11 +16,11 @@ watcher echo hello
 
 Compile and run a Nim file if it changes:
 ```
-watcher --inject-file "nim c -r {}"
+watcher --inject "nim c -r {}"
 ```
 
 Run Python whenever a Python file changes:
 ```
-watcher --inject-file --glob="**/*.py" "python {}"
+watcher --inject --glob="**/*.py" "python {}"
 ```
 

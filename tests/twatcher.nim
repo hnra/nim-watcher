@@ -1,56 +1,68 @@
-import std/[unittest, strformat, strutils, options]
+import std/[unittest, strformat, strutils]
 
 import ../src/watcher
 
 test "globArg":
   let glob = "**/*.nim"
   let args = @[fmt"-g={glob}", "cmd"]
-  let pargs = parseArgs(args).get()
+  let pargs = parseArgs(args)
   check pargs.glob == glob
 
 test "cmdArg":
   let cmd = "echo \"hello\""
   let args = split(cmd, " ")
-  let pargs = parseArgs(args).get()
+  let pargs = parseArgs(args)
   check pargs.cmd == "echo \"hello\""
 
+test "help arg shows help":
+  expect HelpError:
+    discard parseArgs(@["-h"])
+
+test "missing cmd shows help":
+  expect HelpError:
+    discard parseArgs(@[])
+
 test "verboseArg":
-  let pargs = parseArgs(split("-v cmd")).get()
+  let pargs = parseArgs(split("-v cmd"))
   check pargs.cmd == "cmd"
   check pargs.verbose
 
 test "injectArg":
-  let pargs = parseArgs(split("-i cmd {}")).get()
+  let pargs = parseArgs(split("-i cmd {}"))
   check pargs.cmd == "cmd {}"
   check pargs.injectFile
   check injectFileCmd(pargs.cmd, "") == "cmd "
   check injectFileCmd(pargs.cmd, "foo.nim") == "cmd foo.nim"
 
+test "inject file requires {} in cmd":
+  expect InvalidArgument:
+    discard parseArgs(split("-i cmd"))
+
 test "leadingEdge is default on":
-  let pargs = parseArgs(split("cmd")).get()
+  let pargs = parseArgs(split("cmd"))
   check pargs.cmd == "cmd"
   check pargs.leadingEdge
 
 test "leadingEdge is default off if file is injected":
-  let pargs = parseArgs(split("-i cmd")).get()
-  check pargs.cmd == "cmd"
+  let pargs = parseArgs(split("-i cmd {}"))
+  check pargs.cmd == "cmd {}"
   check not pargs.leadingEdge
 
 test "leadingEdge default can be overridden":
-  var pargs = parseArgs(split("-l:false cmd")).get()
+  var pargs = parseArgs(split("-l:false cmd"))
   check pargs.cmd == "cmd"
   check not pargs.leadingEdge
 
-  pargs = parseArgs(split("-l:false cmd")).get()
+  pargs = parseArgs(split("-l:false cmd"))
   check not pargs.leadingEdge
 
 test "leadingEdge can be enabled if file is injected":
-  let pargs = parseArgs(split("-l -i cmd")).get()
-  check pargs.cmd == "cmd"
+  let pargs = parseArgs(split("-l -i cmd {}"))
+  check pargs.cmd == "cmd {}"
   check pargs.leadingEdge
 
 test "silent success can be enabled":
-  let pargs = parseArgs(split("-s cmd")).get()
+  let pargs = parseArgs(split("-s cmd"))
   check pargs.cmd == "cmd"
   check pargs.silentSuccess
 
